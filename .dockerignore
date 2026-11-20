@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+*.rar
+*.zip
+*.7z
+backup_pre_upgrade
+10
+V7-fixed-configs
+Scaner-Railway.html
+New Text Document.json
+GUIDE_FA.md
+__pycache__
+*.pyc
