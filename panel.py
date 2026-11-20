@@ -60,8 +60,9 @@ REALITY_PRIV_KEY = os.environ.get("REALITY_PRIVATE_KEY", "").strip()
 REALITY_PUB_KEY = os.environ.get("REALITY_PUBLIC_KEY", "").strip()
 
 # Clean IPs for Cloudflare Fronting & DPI Evasion
-CLEAN_IPS_RAW = os.environ.get("CLEAN_IPS", "104.17.70.206,172.64.154.211,104.21.24.98,208.103.161.198").strip()
+CLEAN_IPS_RAW = os.environ.get("CLEAN_IPS", "153.52.255.81,104.18.138.193,104.18.202.232,172.64.155.209,104.17.70.206").strip()
 CLEAN_IPS = [ip.strip() for ip in CLEAN_IPS_RAW.split(",") if ip.strip()]
+
 
 START_TIME = time.time()
 CONFIGS_DIR = "/app/configs"
@@ -250,13 +251,68 @@ def generate_client_configs(force_refresh=False):
     if CACHED_CLIENT_DATA and not force_refresh:
         return CACHED_CLIENT_DATA
 
-    clean_ip = CLEAN_IPS[0] if CLEAN_IPS else "104.17.70.206"
+    clean_ip = CLEAN_IPS[0] if CLEAN_IPS else "153.52.255.81"
     
     # 1. VLESS Share Links
     links = []
 
-    # A: VLESS + XHTTP Clean IP (Cloudflare Fronting - Ban Proof)
+    enc_path_ws = urllib.parse.quote(WS_PATH, safe="")
     enc_path_xh = urllib.parse.quote(XHTTP_PATH, safe="")
+    enc_path_hu = urllib.parse.quote(HU_PATH, safe="")
+
+    # A: BERMUDA Flagship Packet 1-3 Slicing (&fm= parameter) - Live Verified in Iran
+    fm_pkt13 = json.dumps({
+        "tcp": [{
+            "type": "fragment",
+            "settings": {
+                "packets": "1-3",
+                "lengths": ["48-96"],
+                "delays": ["2-5"],
+                "maxSplit": "4-8"
+            }
+        }]
+    })
+    enc_fm13 = urllib.parse.quote(fm_pkt13)
+    link_bermuda_pkt13 = (
+        f"vless://{UUID}@{clean_ip}:443"
+        f"?encryption=none&security=tls&sni={PUBLIC_HOST}&fp=chrome&alpn=http%2F1.1"
+        f"&fm={enc_fm13}&type=ws&host={PUBLIC_HOST}&path={enc_path_ws}"
+        f"#BERMUDA-PKT-1-3-VERIFIED"
+    )
+    links.append(link_bermuda_pkt13)
+
+    # B: BERMUDA Cascaded Deep Slice for Aggressive DPI (MCI / Irancell)
+    fm_cascaded = json.dumps({
+        "tcp": [{
+            "type": "fragment",
+            "settings": {
+                "packets": "1-3",
+                "lengths": ["16-64"],
+                "delays": ["3-7"],
+                "maxSplit": "4-8"
+            }
+        }]
+    })
+    enc_fm_cascaded = urllib.parse.quote(fm_cascaded)
+    link_bermuda_cascaded = (
+        f"vless://{UUID}@{clean_ip}:443"
+        f"?encryption=none&security=tls&sni={PUBLIC_HOST}&fp=chrome&alpn=http%2F1.1"
+        f"&fm={enc_fm_cascaded}&type=ws&host={PUBLIC_HOST}&path={enc_path_ws}"
+        f"#BERMUDA-CASCADED-DEEP"
+    )
+    links.append(link_bermuda_cascaded)
+
+    # C: BERMUDA iOS Native Fragment (&fragment= parameter for Happ / Streisand / V2Box)
+    enc_frag_ios = urllib.parse.quote("48-96,2-5,1-3")
+    link_bermuda_ios = (
+        f"vless://{UUID}@{clean_ip}:443"
+        f"?encryption=none&security=tls&sni={PUBLIC_HOST}&fp=chrome&alpn=http%2F1.1"
+        f"&fragment={enc_frag_ios}&type=ws&host={PUBLIC_HOST}&path={enc_path_ws}"
+        f"#BERMUDA-iOS-FRAGMENT"
+    )
+    links.append(link_bermuda_ios)
+
+    # D: VLESS + XHTTP Clean IP (Anti-Throttling Stream)
     link_xh_clean = (
         f"vless://{UUID}@{clean_ip}:443"
         f"?encryption=none&security=tls&sni={PUBLIC_HOST}&type=xhttp"
@@ -264,16 +320,7 @@ def generate_client_configs(force_refresh=False):
     )
     links.append(link_xh_clean)
 
-    # B: VLESS + XHTTP Direct (Railway domain)
-    link_xh_direct = (
-        f"vless://{UUID}@{PUBLIC_HOST}:443"
-        f"?encryption=none&security=tls&sni={PUBLIC_HOST}&type=xhttp"
-        f"&path={enc_path_xh}&host={PUBLIC_HOST}&mode=auto&fp=chrome#OmniMesh-XHTTP-Direct"
-    )
-    links.append(link_xh_direct)
-
-    # C: VLESS + WS Clean IP
-    enc_path_ws = urllib.parse.quote(WS_PATH, safe="")
+    # E: VLESS + WS Clean IP (Raw Line-Rate Direct)
     link_ws_clean = (
         f"vless://{UUID}@{clean_ip}:443"
         f"?encryption=none&security=tls&sni={PUBLIC_HOST}&type=ws"
@@ -281,7 +328,7 @@ def generate_client_configs(force_refresh=False):
     )
     links.append(link_ws_clean)
 
-    # D: VLESS + WS Direct
+    # F: VLESS + WS Direct (Direct Domain)
     link_ws_direct = (
         f"vless://{UUID}@{PUBLIC_HOST}:443"
         f"?encryption=none&security=tls&sni={PUBLIC_HOST}&type=ws"
@@ -289,8 +336,7 @@ def generate_client_configs(force_refresh=False):
     )
     links.append(link_ws_direct)
 
-    # E: VLESS + HTTPUpgrade Direct
-    enc_path_hu = urllib.parse.quote(HU_PATH, safe="")
+    # G: VLESS + HTTPUpgrade Direct
     link_hu_direct = (
         f"vless://{UUID}@{PUBLIC_HOST}:443"
         f"?encryption=none&security=tls&sni={PUBLIC_HOST}&type=httpupgrade"
@@ -298,7 +344,7 @@ def generate_client_configs(force_refresh=False):
     )
     links.append(link_hu_direct)
 
-    # F: VLESS + Reality (Only if Railway TCP Proxy domain is configured)
+    # H: VLESS + Reality (Only if Railway TCP Proxy domain is configured)
     if REALITY_DOMAIN:
         link_reality = (
             f"vless://{UUID}@{REALITY_DOMAIN}:{REALITY_PUBLIC_PORT}"
@@ -307,6 +353,7 @@ def generate_client_configs(force_refresh=False):
             f"&flow=xtls-rprx-vision#OmniMesh-Reality-TCP"
         )
         links.append(link_reality)
+
 
     # Base64 Subscription
     sub_raw = "\n".join(links)
